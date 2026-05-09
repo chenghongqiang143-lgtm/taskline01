@@ -1,0 +1,6 @@
+{
+  "name": "Fluent Task Todo",
+  "description": "A high-productivity todo application based on Fluent UI design principles with categorized views for Today, Week, Month, Year, and Someday.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

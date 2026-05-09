@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-fluent-bg: #f8f9ff;
+  --color-fluent-primary: #0078d4;
+  --color-fluent-surface: #ffffff;
+  --color-fluent-border: #ebebeb;
+
+  --color-morandi-blue: #92a8d1;
+  --color-morandi-green: #a3b18a;
+  --color-morandi-rose: #b5838d;
+  --color-morandi-sand: #e6beae;
+}
+
+@layer utilities {
+  .acrylic {
+    @apply backdrop-blur-xl border border-white/40 shadow-sm ring-1 ring-black/5;
+  }
+  
+  .fluent-card {
+    @apply bg-white border border-fluent-border rounded-lg shadow-sm transition-all duration-200;
+  }
+  
+  .fluent-card:hover {
+    @apply shadow-md -translate-y-0.5 border-fluent-primary/20;
+  }
+
+  /* Custom scrollbar to match Fluent aesthetics */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
