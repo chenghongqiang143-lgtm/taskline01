@@ -4,13 +4,13 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   
-  --color-fluent-bg: #f8f9ff;
-  --color-fluent-primary: #0078d4;
+  --color-fluent-bg: #f6f8f7;
+  --color-fluent-primary: #10b981;
   --color-fluent-surface: #ffffff;
   --color-fluent-border: #ebebeb;
 
   --color-morandi-blue: #92a8d1;
-  --color-morandi-green: #a3b18a;
+  --color-morandi-green: #059669;
   --color-morandi-rose: #b5838d;
   --color-morandi-sand: #e6beae;
 }
