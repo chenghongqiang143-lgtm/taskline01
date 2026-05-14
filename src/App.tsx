@@ -40,6 +40,7 @@ import {
   Zap,
   Undo2,
   Edit2,
+  Edit3,
   Trash2,
   Download,
   Upload,
@@ -877,6 +878,80 @@ export default function App() {
     }
   };
 
+  const handleRetractActualTask = (atId: string) => {
+    const at = actualTasks.find((t) => t.id === atId);
+    if (!at) return;
+
+    // 1. Remove from actual tasks
+    setActualTasks((prev) => prev.filter((t) => t.id !== atId));
+
+    // 2. Mark matching planned task(s) as incomplete if they were marked complete
+    setPlannedTasks((prev) =>
+      prev.map((pt) => {
+        if (pt.text === at.text && pt.hour === at.hour && pt.completed) {
+          return { ...pt, completed: false };
+        }
+        return pt;
+      }),
+    );
+
+    // 3. Sync completion state back to other lists (mark as incomplete)
+    const markIncomplete = (list: TodoItem[]) =>
+      list.map((t) => (t.text === at.text ? { ...t, completed: false } : t));
+
+    setScheduledTasks(markIncomplete(scheduledTasks));
+    setTempTasks(markIncomplete(tempTasks));
+    setHabits(markIncomplete(habits));
+    setWeekNextTasks(markIncomplete(weekNextTasks));
+    setWeekWaitTasks(markIncomplete(weekWaitTasks));
+    setWeekRepeatTasks(markIncomplete(weekRepeatTasks));
+    setInboxTasks(markIncomplete(inboxTasks));
+    setSomedayTasks(markIncomplete(somedayTasks));
+
+    const nextWeekTasksByDay = { ...weekTasksByDay };
+    let weekUpdated = false;
+    Object.keys(nextWeekTasksByDay).forEach((key) => {
+      const dIdx = Number(key);
+      if (nextWeekTasksByDay[dIdx].some((t) => t.text === at.text)) {
+        nextWeekTasksByDay[dIdx] = markIncomplete(nextWeekTasksByDay[dIdx]);
+        weekUpdated = true;
+      }
+    });
+    if (weekUpdated) setWeekTasksByDay(nextWeekTasksByDay);
+
+    const syncIncomplete = (goals: Goal[]) =>
+      goals.map((g) => ({
+        ...g,
+        keyResults: g.keyResults?.map((kr) => ({
+          ...kr,
+          tasks: kr.tasks.map((t) =>
+            t.text === at.text ? { ...t, completed: false } : t,
+          ),
+        })),
+      }));
+    setMonthGoals(syncIncomplete(monthGoals));
+    setYearGoals(syncIncomplete(yearGoals));
+    setSomedayGoals(syncIncomplete(somedayGoals));
+  };
+
+  const handleRetractPlannedTask = (ptId: string) => {
+    const pt = plannedTasks.find((t) => t.id === ptId);
+    if (!pt) return;
+
+    // Remove from planned
+    setPlannedTasks((prev) => prev.filter((t) => t.id !== ptId));
+
+    // If it was completed, find and remove from actual
+    if (pt.completed) {
+      const at = actualTasks.find(
+        (at) => at.text === pt.text && at.hour === pt.hour,
+      );
+      if (at) {
+        handleRetractActualTask(at.id);
+      }
+    }
+  };
+
   const toggleKRTask = (
     goalType: "week" | "month" | "year" | "someday",
     goalId: string,
@@ -1035,6 +1110,8 @@ export default function App() {
     { id: "sd-3", text: "深入研究量子计算", completed: false },
   ]);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [reviewChecklist, setReviewChecklist] = useState<number[]>([]);
+  const [reviewNote, setReviewNote] = useState("");
   const [lastReviewDate] = useState<Date>(new Date(2026, 4, 8)); // 5月8日
 
   // Settings & Pomodoro State
@@ -1771,10 +1848,10 @@ export default function App() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-6"
+      className="space-y-6 md:flex md:gap-8 md:items-start md:space-y-0 max-w-7xl mx-auto pb-32"
     >
       {/* Timeline Section */}
-      <section className="relative -mx-2 px-2 pb-72">
+      <section className="relative -mx-2 px-2 pb-72 md:pb-0 md:flex-1 min-w-0">
         <header className="flex justify-between items-end mb-5 px-2">
           <div>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">
@@ -1789,7 +1866,7 @@ export default function App() {
           </div>
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="p-3 bg-white hover:bg-gray-50 text-gray-400 hover:text-emerald-600 rounded-xl border border-gray-100 shadow-sm transition-all active:scale-95"
+            className="p-3 bg-white hover:bg-gray-50 text-gray-400 hover:text-emerald-600 rounded-xl border border-gray-100 transition-all active:scale-95"
           >
             <SettingsIcon className="w-5 h-5" />
           </button>
@@ -1838,7 +1915,10 @@ export default function App() {
                       <PressableItem
                         key={pt.id}
                         onLongPress={() => openTaskActionSheet(pt, "planned")}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRetractPlannedTask(pt.id);
+                        }}
                         className={`w-full bg-emerald-100/80 backdrop-blur-md border border-emerald-200 rounded p-2 items-center flex shadow-sm transition-all group relative ${pt.completed ? "opacity-40 grayscale" : "hover:scale-[1.01] hover:shadow-md hover:bg-emerald-100"}`}
                       >
                         <button
@@ -1910,7 +1990,8 @@ export default function App() {
                       .map((at, idx) => (
                         <div
                           key={at.id || idx}
-                          className="w-full bg-[#b5838d]/10 backdrop-blur-md border border-[#b5838d]/20 rounded-lg p-2 flex items-center shadow-sm"
+                          onClick={() => handleRetractActualTask(at.id)}
+                          className="w-full bg-[#b5838d]/10 backdrop-blur-md border border-[#b5838d]/20 rounded-lg p-2 flex items-center shadow-sm cursor-pointer hover:bg-[#b5838d]/20 transition-all"
                         >
                           <span className="text-[11px] font-bold text-[#6d4c51] truncate leading-tight">
                             {at.text}
@@ -1926,11 +2007,11 @@ export default function App() {
       </section>
 
       {/* Bottom Area: Categories Grid + Inbox Input */}
-      <div className="fixed bottom-20 left-0 right-0 z-40 pointer-events-none">
-        <div className="max-w-2xl mx-auto px-4 pointer-events-auto">
-          {/* Categories Grid (Horizontal Scroll) */}
-          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-2 -mx-4 px-4">
-            <section className="acrylic bg-blue-500/15 backdrop-blur-md rounded-xl p-3 flex flex-col gap-2 aspect-square border-blue-500/20 shadow-sm overflow-hidden w-[38vw] shrink-0 sm:w-[240px] snap-center">
+      <div className="fixed bottom-20 left-0 right-0 z-40 pointer-events-none md:sticky md:top-8 md:bottom-auto md:right-auto md:z-10 md:w-[320px] md:shrink-0 md:pointer-events-auto">
+        <div className="max-w-2xl mx-auto px-4 pointer-events-auto md:px-0 md:max-w-none">
+          {/* Categories Grid (Horizontal Scroll on Mobile, Vertical on Medium+) */}
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-2 -mx-4 px-4 md:flex-col md:overflow-visible md:snap-none md:mx-0 md:px-0 md:gap-4 md:pb-0">
+            <section className="acrylic bg-blue-500/15 backdrop-blur-md rounded-xl p-3 flex flex-col gap-2 aspect-square border-blue-500/20 shadow-sm overflow-hidden w-[38vw] shrink-0 sm:w-[240px] md:w-full md:aspect-auto md:min-h-[160px] snap-center">
               <div className="flex justify-between items-center flex-shrink-0">
                 <h3 className="font-bold text-blue-900 text-[11px]">
                   临时待办
@@ -2010,7 +2091,6 @@ export default function App() {
                             },
                           ]);
                           setNewTemp("");
-                          setAddingTemp(false);
                         } else if (e.key === "Escape") {
                           setAddingTemp(false);
                           setNewTemp("");
@@ -2041,13 +2121,20 @@ export default function App() {
                 setActiveTab("week");
                 setWeekTab("下一步");
               }}
-              className="acrylic bg-red-500/15 backdrop-blur-md rounded-xl p-3 flex flex-col gap-2 aspect-square border-red-500/20 shadow-sm overflow-hidden w-[38vw] shrink-0 sm:w-[240px] snap-center cursor-pointer group/sched"
+              className="acrylic bg-red-500/15 backdrop-blur-md rounded-xl p-3 flex flex-col gap-2 aspect-square border-red-500/20 shadow-sm overflow-hidden w-[38vw] shrink-0 sm:w-[240px] md:w-full md:aspect-auto md:min-h-[160px] snap-center cursor-pointer group/sched"
             >
               <div className="flex justify-between items-center flex-shrink-0">
                 <h3 className="font-bold text-red-900 text-[11px]">
                   安排任务
                 </h3>
-                <ChevronRight className="w-3.5 h-3.5 text-red-900/60 group-hover/sched:translate-x-0.5 transition-all" />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddingScheduled(true);
+                  }}
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-red-900/60 hover:text-red-900 transition-colors" />
+                </button>
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 pb-1">
                 {[...scheduledTasks, ...(weekTasksByDay[1] || [])]
@@ -2119,7 +2206,6 @@ export default function App() {
                             },
                           ]);
                           setNewScheduled("");
-                          setAddingScheduled(false);
                         } else if (e.key === "Escape") {
                           setAddingScheduled(false);
                           setNewScheduled("");
@@ -2146,7 +2232,7 @@ export default function App() {
             </section>
 
 
-            <section className="acrylic bg-rose-500/15 backdrop-blur-md rounded-xl p-3 flex flex-col gap-2 aspect-square border-rose-500/20 shadow-sm overflow-hidden w-[38vw] shrink-0 sm:w-[240px] snap-center">
+            <section className="acrylic bg-rose-500/15 backdrop-blur-md rounded-xl p-3 flex flex-col gap-2 aspect-square border-rose-500/20 shadow-sm overflow-hidden w-[38vw] shrink-0 sm:w-[240px] md:w-full md:aspect-auto md:min-h-[160px] snap-center">
               <div className="flex justify-between items-center flex-shrink-0">
                 <h3 className="font-bold text-rose-900 text-[11px]">习惯</h3>
                 <button
@@ -5254,74 +5340,103 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="bg-white p-5 rounded-[16px] shadow-sm border border-orange-100 flex flex-col gap-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs">
-                    1
+              {[
+                {
+                  id: 1,
+                  title: "检查项目",
+                  desc: "每个项目至少有1条下一步动作。",
+                  color: "orange",
+                },
+                {
+                  id: 2,
+                  title: "检查等待",
+                  desc: "都有日期，该催的催，该放弃的删。",
+                  color: "emerald",
+                },
+                {
+                  id: 3,
+                  title: "检查重复事项",
+                  desc: "这周哪些例行要调整。",
+                  color: "green",
+                },
+                {
+                  id: 4,
+                  title: "清理将来",
+                  desc: "删掉一半也正常。",
+                  color: "purple",
+                },
+                {
+                  id: 5,
+                  title: "计划下周",
+                  desc: "挑3-5个重点推进的项目。",
+                  color: "red",
+                },
+              ].map((step) => (
+                <div
+                  key={step.id}
+                  onClick={() => {
+                    if (reviewChecklist.includes(step.id)) {
+                      setReviewChecklist(
+                        reviewChecklist.filter((id) => id !== step.id),
+                      );
+                    } else {
+                      setReviewChecklist([...reviewChecklist, step.id]);
+                    }
+                  }}
+                  className={`p-5 rounded-[16px] shadow-sm border transition-all cursor-pointer flex items-start gap-4 ${
+                    reviewChecklist.includes(step.id)
+                      ? "bg-gray-50 border-gray-200 opacity-60"
+                      : `bg-white border-${step.color}-100`
+                  }`}
+                >
+                  <div
+                    className={`shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                      reviewChecklist.includes(step.id)
+                        ? "bg-emerald-500 border-emerald-500"
+                        : "border-gray-300"
+                    }`}
+                  >
+                    {reviewChecklist.includes(step.id) && (
+                      <Check className="w-4 h-4 text-white" />
+                    )}
                   </div>
-                  <h3 className="font-bold text-gray-800 text-[15px]">
-                    检查项目
-                  </h3>
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-6 h-6 rounded bg-${step.color}-100 text-${step.color}-600 flex items-center justify-center font-bold text-[10px]`}
+                      >
+                        {step.id}
+                      </div>
+                      <h3
+                        className={`font-bold text-[15px] ${
+                          reviewChecklist.includes(step.id)
+                            ? "text-gray-400 line-through"
+                            : "text-gray-800"
+                        }`}
+                      >
+                        {step.title}
+                      </h3>
+                    </div>
+                    <p className="text-gray-500 text-xs leading-relaxed">
+                      {step.desc}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-gray-500 text-xs ml-10 leading-relaxed">
-                  每个项目至少有1条下一步动作。
-                </p>
-              </div>
+              ))}
 
-              <div className="bg-white p-5 rounded-[16px] shadow-sm border border-emerald-100 flex flex-col gap-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs">
-                    2
-                  </div>
+              <div className="bg-white p-5 rounded-[16px] shadow-sm border border-emerald-100 flex flex-col gap-3 mt-4">
+                <div className="flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#a66232]" />
                   <h3 className="font-bold text-gray-800 text-[15px]">
-                    检查等待
+                    周记与反思
                   </h3>
                 </div>
-                <p className="text-gray-500 text-xs ml-10 leading-relaxed">
-                  都有日期，该催的催，该放弃的删。
-                </p>
-              </div>
-
-              <div className="bg-white p-5 rounded-[16px] shadow-sm border border-green-100 flex flex-col gap-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-7 h-7 rounded-lg bg-green-100 text-green-600 flex items-center justify-center font-bold text-xs">
-                    3
-                  </div>
-                  <h3 className="font-bold text-gray-800 text-[15px]">
-                    检查重复事项
-                  </h3>
-                </div>
-                <p className="text-gray-500 text-xs ml-10 leading-relaxed">
-                  这周哪些例行要调整。
-                </p>
-              </div>
-
-              <div className="bg-white p-5 rounded-[16px] shadow-sm border border-purple-100 flex flex-col gap-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-xs">
-                    4
-                  </div>
-                  <h3 className="font-bold text-gray-800 text-[15px]">
-                    清理将来
-                  </h3>
-                </div>
-                <p className="text-gray-500 text-xs ml-10 leading-relaxed">
-                  删掉一半也正常。
-                </p>
-              </div>
-
-              <div className="bg-white p-5 rounded-[16px] shadow-sm border border-red-100 flex flex-col gap-1">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-7 h-7 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">
-                    5
-                  </div>
-                  <h3 className="font-bold text-gray-800 text-[15px]">
-                    计划下周
-                  </h3>
-                </div>
-                <p className="text-gray-500 text-xs ml-10 leading-relaxed">
-                  挑3-5个重点推进的项目。
-                </p>
+                <textarea
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
+                  placeholder="记录本周的收获、感悟及下周的改进点..."
+                  className="w-full h-32 p-3 bg-gray-50 rounded-xl text-sm border-none focus:ring-2 focus:ring-[#9b5110]/20 resize-none placeholder:text-gray-400"
+                ></textarea>
               </div>
             </div>
           </div>
@@ -5661,9 +5776,9 @@ export default function App() {
             exit={{ opacity: 0, y: 100 }}
             className="fixed bottom-[90px] px-2 left-0 right-0 z-[90] max-w-screen-md mx-auto pointer-events-none"
           >
-             <div className="bg-gray-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl p-4 flex items-center justify-between border border-gray-800 pointer-events-auto">
+             <div className="bg-gray-900/95 backdrop-blur-md text-white rounded-2xl p-4 flex items-center justify-between border border-gray-800 pointer-events-auto">
               <div className="flex items-center gap-3 pl-1">
-                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-sm font-bold shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-sm font-bold">
                   {selectedTasks.length}
                 </div>
                 <span className="text-sm md:text-base font-bold">已选择</span>
@@ -5703,7 +5818,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-[#fcf8f5] w-full sm:w-[400px] h-[70vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl relative flex flex-col overflow-hidden will-change-transform"
+              className="bg-[#fcf8f5] w-full sm:w-[400px] h-[70vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl relative flex flex-col overflow-hidden will-change-transform"
             >
               <div className="p-5 flex-shrink-0 flex items-center justify-between border-b border-gray-100 bg-white sticky top-0 z-10">
                 <h3 className="text-lg font-bold text-gray-900 text-center flex-1">
